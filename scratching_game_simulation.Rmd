@@ -57,7 +57,7 @@ Decide the balance between the 3 groups, do they all have the same probability t
 ```{r}
 Number_of_players=5000
 
-win_chance_factor=c(Lucky=1,Normal=1,Unlucky=1)
+win_chance_factor=c(Lucky=1.1,Normal=1,Unlucky=0.9)
 Player_repartition=c(Lucky=33,Normal=33,Unlucky=33)
 Avg_number_of_play=5
 ```
@@ -156,7 +156,6 @@ Observation = Observation %>%
 
 
 # Result analysis
-
 ## Distribution of players win rate
 ```{r}
 Analysis = Observation %>% 
@@ -165,16 +164,28 @@ Analysis = Observation %>%
 
 ggplot(Analysis, aes_string("category","freq_win",fill="category"))+
   geom_boxplot()+
-  stat_summary(fun.y=mean, colour="darkred", geom="point", shape=18, size=3,show_guide = FALSE)+
+  stat_summary(fun.y=mean, colour="darkred", geom="point", shape=18, size=3,show.legend = FALSE)+
   ggtitle("Distribution of players win rate")
 ```
 
 
-# Statistical analysis
+## Statistical analysis
+
+### Summary of the simulation
+
+We simulated `r Number_of_players` players.\
+We had `r Num_categories_of_player` categories of players: `r paste(Categories_of_player,collapse=", ")`.\
+The simulated winrate between groups were: `r paste(Categories_of_player,win_chance_factor,sep=": ",collapse="; ")`.\
+Each player scratch `r Avg_number_of_play` $\pm$ 1sd (normal distribution).\
+The players don't choose the scratching game with equal proability: the cheaper it is, the more frequent it is.
+
+### Statistical test: ${\chi}^2$
+
 
 ```{r}
 chisq.test(Observation$Win.Loose,Observation$category)
 ```
+
 
 
 
