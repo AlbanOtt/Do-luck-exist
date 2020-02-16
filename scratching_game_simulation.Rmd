@@ -1,0 +1,180 @@
+---
+title: "Simulate scratching game"
+author: "Alban Ott"
+date: "15 février 2020"
+output:
+  rmdformats::readthedown:
+    code_folding: hide
+    self_contained: true
+    thumbnails: false
+    lightbox: false
+---
+
+```{r}
+rm(list=ls())
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+theme_set(theme_bw())
+```
+
+The cheaper the game is the more iit is played
+
+
+# Input data
+```{r}
+#source: https://www.bfmtv.com/loto/les-probabilites-de-gagner-aux-loteries-et-jeux-a-gratter-1460504.html
+known_stats = read.table(text="Nom du jeu	Mise	Gain max.	Probabilite gain max.	Probabilite gain	Esperance gain
+10 ans gagnants	5	340000	1500000	4.21	-1.4
+Astro	2	20000	1125000	3.28	-0.67
+Banco	1	1000	750000	4.24	-0.37
+Black Jack	2	40000	1500000	4.46	-0.63
+Cash	5	500000	6000000	3.83	-1.45
+Goal	1	4000	1500000	3.97	-0.35
+Jackpot	5	500000	6000000	5.5	-1.4
+Maxi Goal	3	40000	1500000	3.83	-0.35
+Maxi Mots Croises	5	250000	1500000	3.81	-1.5
+Millionnaire	10	1000000	1500000	3.35	-2.65
+Mini Mots Croises	2	15000	750000	3.66	-0.68
+Mots Croises	3	30000	750000	4.52	-1.46
+Mega Mots Croises	10	600000	3000000	2.94	-2.8
+Numero Fetiche	1	1000	500000	3.53	-0.37
+Pactole	2	200000	4500000	4.26	-0.64
+Solitaire	2	25000	1500000	3.44	-0.68
+Vegas	3	50000	1000000	3.81	-0.9",
+header=TRUE,
+sep="\t")
+
+known_stats$Win.Prob = 1/known_stats$Probabilite.gain
+known_stats$Prob.Play = known_stats$Mise/sum(known_stats$Mise)
+```
+
+# Simulate 3 groups
+
+
+## Parameters
+Decide the balance between the 3 groups, do they all have the same probability to win ?
+```{r}
+Number_of_players=5000
+
+win_chance_factor=c(Lucky=1,Normal=1,Unlucky=1)
+Player_repartition=c(Lucky=33,Normal=33,Unlucky=33)
+Avg_number_of_play=5
+```
+
+## Usefull derivatives
+```{r}
+Num_categories_of_player=length(Player_repartition)
+Categories_of_player=names(Player_repartition)
+Player_repartition = Player_repartition/sum(Player_repartition)
+```
+
+## Data simulation
+
+one line per play
+```{r}
+Observation = data.frame(id.player = 1:Number_of_players)
+```
+
+Category of each player
+```{r}
+Observation = Observation %>% 
+  mutate(category = sample(x = Categories_of_player,
+                                           size = Number_of_players,
+                                           prob = Player_repartition,
+                                           replace = TRUE)
+)
+```
+
+How many time do they play
+```{r}
+Observation$Play.Num=rnorm(n = Number_of_players, mean = Avg_number_of_play) %>% 
+  round()
+```
+
+
+Duplicate each player for each time they play
+```{r}
+Observation = Observation %>%
+  uncount(Play.Num,
+          .id="id.game",
+          .remove=FALSE) 
+
+```
+
+What game are they playing ?
+NB: the cheaper the game is the more iit is played
+```{r}
+Observation = Observation %>% 
+  mutate(Game = sample(x = known_stats$Nom.du.jeu,
+                          size = n(), 
+                          prob=known_stats$Prob.Play,
+                          replace = TRUE)
+  )
+```
+
+Add probability of winning to this game
+```{r}
+Observation = left_join(Observation, known_stats[,c("Nom.du.jeu","Win.Prob")],
+          by=c("Game" = "Nom.du.jeu")
+)
+```
+
+Add the additional chance of this category of player
+```{r}
+tmp = data.frame(category=names(win_chance_factor),win_chance_factor=win_chance_factor)
+
+Observation = left_join(Observation,tmp,
+          by="category"
+)
+```
+
+Adjust the win probability according to the chance of this category of player
+```{r}
+Observation = Observation %>% 
+  mutate(Adj.Win.Prob=Win.Prob*win_chance_factor) %>% 
+  mutate(Adj.Win.Prob = if_else(Adj.Win.Prob>1,
+                                true=1,
+                                false=Adj.Win.Prob))
+```
+
+
+Do they win ?
+
+```{r}
+Observation = Observation %>% 
+  rowwise() %>% 
+  mutate(Win.Loose=sample(x = c("Win","Loose"),
+                          size = 1,
+                          prob = c(Adj.Win.Prob,1-Adj.Win.Prob)
+                          )
+         ) %>% 
+  ungroup()
+```
+
+
+
+
+# Result analysis
+
+## Distribution of players win rate
+```{r}
+Analysis = Observation %>% 
+  group_by(id.player,category) %>% 
+  summarize(freq_win=sum(Win.Loose=="Win")/n())
+
+ggplot(Analysis, aes_string("category","freq_win",fill="category"))+
+  geom_boxplot()+
+  stat_summary(fun.y=mean, colour="darkred", geom="point", shape=18, size=3,show_guide = FALSE)+
+  ggtitle("Distribution of players win rate")
+```
+
+
+# Statistical analysis
+
+```{r}
+chisq.test(Observation$Win.Loose,Observation$category)
+```
+
+
+
